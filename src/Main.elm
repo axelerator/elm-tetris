@@ -7,6 +7,7 @@ import List exposing (map, range)
 import String exposing (fromInt)
 import Svg
 import Svg.Attributes as SA
+import Time
 
 
 
@@ -28,6 +29,14 @@ main =
 
 type alias Model =
     { board : Board
+    , currentPiece : CurrentPiece
+    }
+
+
+type alias CurrentPiece =
+    { position : Position
+    , tiles : List Position
+    , color : FieldColor
     }
 
 
@@ -128,8 +137,16 @@ init _ =
 
         emptyBoard =
             { rows = map mkEmptyRow <| range 1 boardHeight }
+
+        currentPiece =
+            { position = ( 5, boardHeight )
+            , tiles = tPiece.tiles
+            , color = tPiece.color
+            }
     in
-    ( { board = setField ( 5, 3 ) Red <| setField ( 1, 1 ) Blue emptyBoard }
+    ( { board = emptyBoard
+      , currentPiece = currentPiece
+      }
     , Cmd.none
     )
 
@@ -141,11 +158,17 @@ init _ =
 type Msg
     = Left
     | Right
+    | GravityTick Time.Posix
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        GravityTick _ ->
+            ( dropCurrentPiece model
+            , Cmd.none
+            )
+
         Left ->
             ( model
             , Cmd.none
@@ -157,13 +180,25 @@ update msg model =
             )
 
 
+dropCurrentPiece : Model -> Model
+dropCurrentPiece ({ currentPiece } as model) =
+    let
+        ( x, y ) =
+            currentPiece.position
+
+        droppedPiece =
+            { currentPiece | position = ( x, y - 1 ) }
+    in
+    { model | currentPiece = droppedPiece }
+
+
 
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    Time.every 1000 GravityTick
 
 
 
@@ -174,18 +209,21 @@ view : Model -> Html Msg
 view model =
     div []
         [ div [] [ text "LOOK MUM, NO SERVER" ]
-        , boardView model.board
+        , boardView model.board model.currentPiece
         ]
 
 
-placePieceOnBoard : Position -> PieceDefinition -> Board -> Board
-placePieceOnBoard ( x, y ) pieceDef oldBoard =
+placePieceOnBoard : CurrentPiece -> Board -> Board
+placePieceOnBoard currentPiece oldBoard =
     let
+        ( x, y ) =
+            currentPiece.position
+
         translateTile ( tx, ty ) =
             ( x + tx, y + ty )
 
         absoluteTilePositions =
-            map translateTile pieceDef.tiles
+            map translateTile currentPiece.tiles
 
         minRowTaken =
             Maybe.withDefault 0 <|
@@ -207,7 +245,7 @@ placePieceOnBoard ( x, y ) pieceDef oldBoard =
 
                 colorField columnIndex field =
                     if containedInTakenPositions ( columnIndex, rowIndex ) then
-                        Field pieceDef.color
+                        Field currentPiece.color
 
                     else
                         field
@@ -227,17 +265,14 @@ placePieceOnBoard ( x, y ) pieceDef oldBoard =
     { oldBoard | rows = newRows }
 
 
-boardView : Board -> Html Msg
-boardView board =
+boardView : Board -> CurrentPiece -> Html Msg
+boardView board currentPiece =
     let
-        boardWithPiece =
-            placePieceOnBoard ( 2, 9 ) tPiece board
-
-        boardWithPieces =
-            placePieceOnBoard ( 5, 13 ) jPiece boardWithPiece
+        boardWithCurrentPiece =
+            placePieceOnBoard currentPiece board
 
         rowViews =
-            List.concat (List.indexedMap rowView boardWithPieces.rows)
+            List.concat (List.indexedMap rowView boardWithCurrentPiece.rows)
     in
     Svg.svg
         [ SA.width "150"
