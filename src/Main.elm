@@ -1,8 +1,10 @@
 module Main exposing (..)
 
 import Browser
+import Browser.Events exposing (onKeyDown)
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
+import Json.Decode as Decode
 import List exposing (map, range)
 import String exposing (fromInt)
 import Svg
@@ -156,9 +158,14 @@ init _ =
 
 
 type Msg
-    = Left
-    | Right
-    | GravityTick Time.Posix
+    = GravityTick Time.Posix
+    | KeyDown Key
+    | Noop
+
+
+type Key
+    = LeftArrow
+    | RightArrow
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -169,15 +176,35 @@ update msg model =
             , Cmd.none
             )
 
-        Left ->
+        KeyDown key ->
+            ( movePiece key model
+            , Cmd.none
+            )
+
+        Noop ->
             ( model
             , Cmd.none
             )
 
-        Right ->
-            ( model
-            , Cmd.none
-            )
+
+movePiece : Key -> Model -> Model
+movePiece key ({ currentPiece } as model) =
+    let
+        ( x, y ) =
+            currentPiece.position
+
+        newPosition =
+            case key of
+                LeftArrow ->
+                    ( x - 1, y )
+
+                RightArrow ->
+                    ( x + 1, y )
+
+        movedPiece =
+            { currentPiece | position = newPosition }
+    in
+    { model | currentPiece = movedPiece }
 
 
 dropCurrentPiece : Model -> Model
@@ -186,8 +213,15 @@ dropCurrentPiece ({ currentPiece } as model) =
         ( x, y ) =
             currentPiece.position
 
+        nextRow =
+            if y == 0 then
+                20
+
+            else
+                y - 1
+
         droppedPiece =
-            { currentPiece | position = ( x, y - 1 ) }
+            { currentPiece | position = ( x, nextRow ) }
     in
     { model | currentPiece = droppedPiece }
 
@@ -198,17 +232,40 @@ dropCurrentPiece ({ currentPiece } as model) =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Time.every 1000 GravityTick
+    Sub.batch
+        [ Time.every 1000 GravityTick
+        , onKeyDown keyDecoder
+        ]
+
+
+keyDecoder : Decode.Decoder Msg
+keyDecoder =
+    Decode.map toKey (Decode.field "key" Decode.string)
+
+
+toKey : String -> Msg
+toKey string =
+    case string of
+        "ArrowLeft" ->
+            KeyDown LeftArrow
+
+        "ArrowRight" ->
+            KeyDown RightArrow
+
+        _ ->
+            Noop
 
 
 
+-- Decode.succeed KeyDown
 -- VIEW
 
 
 view : Model -> Html Msg
 view model =
     div []
-        [ div [] [ text "LOOK MUM, NO SERVER" ]
+        [ div [] [ text "Developing a Web Tetris in Elm" ]
+        , div [] [ text "Continuing TONIGHT at 7PM (EST)" ]
         , boardView model.board model.currentPiece
         ]
 
