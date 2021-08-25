@@ -141,7 +141,7 @@ init _ =
             { rows = map mkEmptyRow <| range 1 boardHeight }
 
         currentPiece =
-            { position = ( 5, boardHeight - 2 )
+            { position = ( 5, boardHeight )
             , tiles = tPiece.tiles
             , color = tPiece.color
             }
@@ -208,66 +208,22 @@ movePiece key ({ currentPiece } as model) =
 
 
 dropCurrentPiece : Model -> Model
-dropCurrentPiece ({ currentPiece, board } as model) =
+dropCurrentPiece ({ currentPiece } as model) =
     let
         ( x, y ) =
             currentPiece.position
 
         nextRow =
-            y - 1
+            if y == 0 then
+                20
+
+            else
+                y - 1
 
         droppedPiece =
             { currentPiece | position = ( x, nextRow ) }
-
-        translateTile ( tx, ty ) =
-            ( x + tx, y + ty )
-
-        absoluteTilePositions =
-            map translateTile droppedPiece.tiles
-
-        isEmpty : Position -> Bool
-        isEmpty ( tx, ty ) =
-            let
-                mbRow =
-                    List.head <| List.drop (ty - 1) board.rows
-
-                field : Maybe Field
-                field =
-                    if tx < 0 || ty < 0 then
-                        Nothing
-
-                    else
-                        case mbRow of
-                            Just (Row columns) ->
-                                List.head <| List.drop (tx - 1) columns
-
-                            Nothing ->
-                                Nothing
-            in
-            field == Just Empty
-
-        canDrop =
-            List.all isEmpty absoluteTilePositions
-
-        freshPiece =
-            { position = ( 5, boardHeight - 2 )
-            , tiles = jPiece.tiles
-            , color = jPiece.color
-            }
     in
-    if canDrop then
-        { model | currentPiece = droppedPiece }
-
-    else
-        let
-            _ =
-                Debug.log "currentPiece" <| currentPiece
-        in
-        -- bakeInPieceAndSpawnNewPiece
-        { model
-            | board = placePieceOnBoard currentPiece board
-            , currentPiece = freshPiece
-        }
+    { model | currentPiece = droppedPiece }
 
 
 
@@ -277,7 +233,7 @@ dropCurrentPiece ({ currentPiece, board } as model) =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Time.every 300 GravityTick
+        [ Time.every 1000 GravityTick
         , onKeyDown keyDecoder
         ]
 
