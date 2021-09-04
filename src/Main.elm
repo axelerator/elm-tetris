@@ -5,7 +5,8 @@ import Browser.Events exposing (onKeyDown)
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
-import List exposing (map, range)
+import List exposing (drop, head, length, map, range)
+import Random
 import String exposing (fromInt)
 import Svg
 import Svg.Attributes as SA
@@ -31,7 +32,7 @@ main =
 
 type alias Model =
     { board : Board
-    , currentPiece : CurrentPiece
+    , currentPiece : Maybe CurrentPiece
     }
 
 
@@ -95,6 +96,12 @@ jPiece =
     }
 
 
+pieceDefinitions =
+    [ tPiece
+    , jPiece
+    ]
+
+
 updateRow : FieldColor -> Position -> Int -> Row -> Row
 updateRow newColor ( x, y ) rowIndex ((Row fields) as oldRow) =
     let
@@ -148,17 +155,11 @@ init _ =
     let
         emptyBoard =
             mkEmptyBoard boardHeight boardWidth
-
-        currentPiece =
-            { position = ( 5, boardHeight - 2 )
-            , tiles = tPiece.tiles
-            , color = tPiece.color
-            }
     in
     ( { board = emptyBoard
-      , currentPiece = currentPiece
+      , currentPiece = Nothing
       }
-    , Cmd.none
+    , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
     )
 
 
@@ -170,23 +171,28 @@ type Msg
     = GravityTick Time.Posix
     | KeyDown Key
     | Noop
+    | NewCurrentPiece Int
 
 
 type Key
     = LeftArrow
     | RightArrow
+    | DownArrow
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         GravityTick _ ->
-            ( dropCurrentPiece model
-            , Cmd.none
-            )
+            dropCurrentPiece model
 
         KeyDown key ->
             ( movePiece key model
+            , Cmd.none
+            )
+
+        NewCurrentPiece pieceIndex ->
+            ( spawnPiece pieceIndex model
             , Cmd.none
             )
 
@@ -196,24 +202,70 @@ update msg model =
             )
 
 
-movePiece : Key -> Model -> Model
-movePiece key ({ currentPiece } as model) =
+spawnPiece : Int -> Model -> Model
+spawnPiece pieceIndex model =
     let
-        ( x, y ) =
-            currentPiece.position
+        pieceDef =
+            Maybe.withDefault tPiece <| head <| drop pieceIndex pieceDefinitions
 
-        newPosition =
-            case key of
-                LeftArrow ->
-                    ( x - 1, y )
-
-                RightArrow ->
-                    ( x + 1, y )
-
-        movedPiece =
-            { currentPiece | position = newPosition }
+        newPiece =
+            { position = ( 5, boardHeight - 2 )
+            , tiles = pieceDef.tiles
+            , color = pieceDef.color
+            }
     in
-    { model | currentPiece = movedPiece }
+    { model
+        | currentPiece = Just newPiece
+    }
+
+
+movePiece : Key -> Model -> Model
+movePiece key model =
+    case model.currentPiece of
+        Nothing ->
+            model
+
+        Just currentPiece ->
+            let
+                ( x, y ) =
+                    currentPiece.position
+
+                tiles =
+                    currentPiece.tiles
+
+                newPosition =
+                    case key of
+                        LeftArrow ->
+                            ( x - 1, y )
+
+                        RightArrow ->
+                            ( x + 1, y )
+
+                        DownArrow ->
+                            ( x, y )
+
+                newTiles =
+                    case key of
+                        LeftArrow ->
+                            tiles
+
+                        RightArrow ->
+                            tiles
+
+                        DownArrow ->
+                            let
+                                rotate ( tx, ty ) =
+                                    ( -ty, tx )
+                            in
+                            map rotate tiles
+
+                movedPiece =
+                    { currentPiece
+                        | position = newPosition
+                        , tiles = newTiles
+                    }
+            in
+            { model | currentPiece = Just movedPiece }
 
 
 canDrop : CurrentPiece -> Board -> Bool
@@ -253,30 +305,35 @@ canDrop { position, tiles } board =
     List.all canPlace translatedTiles
 
 
-dropCurrentPiece : Model -> Model
-dropCurrentPiece ({ currentPiece, board } as model) =
-    let
-        ( x, y ) =
-            currentPiece.position
+dropCurrentPiece : Model -> ( Model, Cmd Msg )
+dropCurrentPiece ({ board } as model) =
+    case model.currentPiece of
+        Nothing ->
+            ( model, Cmd.none )
 
-        nextRow =
-            y - 1
+        Just currentPiece ->
+            let
+                ( x, y ) =
+                    currentPiece.position
 
-        droppedPiece =
-            { currentPiece | position = ( x, nextRow ) }
-    in
-    if canDrop currentPiece board then
-        { model | currentPiece = droppedPiece }
+                nextRow =
+                    y - 1
 
-    else
-        { model
-            | board = placePieceOnBoard currentPiece board
-            , currentPiece =
-                { position = ( 5, boardHeight - 2 )
-                , tiles = jPiece.tiles
-                , color = jPiece.color
-                }
-        }
+                droppedPiece =
+                    { currentPiece | position = ( x, nextRow ) }
+            in
+            if canDrop currentPiece board then
+                ( { model | currentPiece = Just droppedPiece }
+                , Cmd.none
+                )
+
+            else
+                ( { model
+                    | board = placePieceOnBoard currentPiece board
+                    , currentPiece = Nothing
+                  }
+                , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
+                )
 
 
 
@@ -304,6 +361,9 @@ toKey string =
 
         "ArrowRight" ->
             KeyDown RightArrow
+
+        "ArrowDown" ->
+            KeyDown DownArrow
 
         _ ->
             Noop
@@ -375,11 +435,16 @@ placePieceOnBoard currentPiece oldBoard =
     { oldBoard | rows = newRows }
 
 
-boardView : Board -> CurrentPiece -> Html Msg
-boardView board currentPiece =
+boardView : Board -> Maybe CurrentPiece -> Html Msg
+boardView board mbCurrentPiece =
     let
         boardWithCurrentPiece =
-            placePieceOnBoard currentPiece board
+            case mbCurrentPiece of
+                Nothing ->
+                    board
+
+                Just currentPiece ->
+                    placePieceOnBoard currentPiece board
 
         rowViews =
             List.concat (List.indexedMap rowView boardWithCurrentPiece.rows)
