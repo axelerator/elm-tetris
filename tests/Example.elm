@@ -10,7 +10,21 @@ import Test exposing (..)
 suite : Test
 suite =
     describe "canDrop"
-        [ test "can drop piece on empty board if not at bottom" <|
+        [ test "lookUp returns Nothing for lookup left outside of board" <|
+            \_ ->
+                let
+                    emptyBoard =
+                        mkEmptyBoard 3 3
+                in
+                Expect.equal (lookUp ( -1, 1 ) emptyBoard) Nothing
+        , test "lookUp returns Nothing for lookup below of board" <|
+            \_ ->
+                let
+                    emptyBoard =
+                        mkEmptyBoard 3 3
+                in
+                Expect.equal (lookUp ( -1, 1 ) emptyBoard) Nothing
+        , test "can drop piece on empty board if not at bottom" <|
             \_ ->
                 let
                     currentPiece =

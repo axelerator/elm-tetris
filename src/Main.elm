@@ -5,7 +5,7 @@ import Browser.Events exposing (onKeyDown)
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
-import List exposing (drop, head, length, map, range)
+import List exposing (all, drop, head, length, map, range)
 import Random
 import String exposing (fromInt)
 import Svg
@@ -51,6 +51,8 @@ type alias Board =
 type FieldColor
     = Blue
     | Red
+    | Purple
+    | Green
 
 
 type Field
@@ -69,6 +71,18 @@ type alias Position =
 type alias PieceDefinition =
     { tiles : List Position
     , color : FieldColor
+    }
+
+
+zPiece : PieceDefinition
+zPiece =
+    { tiles =
+        [ ( 0, 0 )
+        , ( -1, 1 )
+        , ( 0, 1 )
+        , ( 1, 0 )
+        ]
+    , color = Green
     }
 
 
@@ -96,9 +110,23 @@ jPiece =
     }
 
 
+lPiece : PieceDefinition
+lPiece =
+    { tiles =
+        [ ( 0, 0 )
+        , ( -1, 0 )
+        , ( 1, 1 )
+        , ( 1, 0 )
+        ]
+    , color = Purple
+    }
+
+
 pieceDefinitions =
     [ tPiece
     , jPiece
+    , lPiece
+    , zPiece
     ]
 
 
@@ -219,6 +247,11 @@ spawnPiece pieceIndex model =
     }
 
 
+flip : (a -> b -> c) -> b -> a -> c
+flip f a b =
+    f b a
+
+
 movePiece : Key -> Model -> Model
 movePiece key model =
     case model.currentPiece of
@@ -230,42 +263,71 @@ movePiece key model =
                 ( x, y ) =
                     currentPiece.position
 
-                tiles =
-                    currentPiece.tiles
-
-                newPosition =
+                ( newPosition, newTiles ) =
                     case key of
                         LeftArrow ->
-                            ( x - 1, y )
+                            ( ( x - 1, y )
+                            , currentPiece.tiles
+                            )
 
                         RightArrow ->
-                            ( x + 1, y )
+                            ( ( x + 1, y )
+                            , currentPiece.tiles
+                            )
 
                         DownArrow ->
-                            ( x, y )
-
-                newTiles =
-                    case key of
-                        LeftArrow ->
-                            tiles
-
-                        RightArrow ->
-                            tiles
-
-                        DownArrow ->
-                            let
-                                rotate ( tx, ty ) =
-                                    ( -ty, tx )
-                            in
-                            map rotate tiles
+                            ( currentPiece.position
+                            , map
+                                (\( tx, ty ) -> ( -ty, tx ))
+                                currentPiece.tiles
+                            )
 
                 movedPiece =
                     { currentPiece
                         | position = newPosition
                         , tiles = newTiles
                     }
+
+                canMove =
+                    all ((==) (Just Empty)) <|
+                        map (flip lookUp model.board) <|
+                            occupiedPositions movedPiece
             in
-            { model | currentPiece = Just movedPiece }
+            if canMove then
+                { model | currentPiece = Just movedPiece }
+
+            else
+                model
+
+
+occupiedPositions : CurrentPiece -> List Position
+occupiedPositions { position, tiles } =
+    let
+        ( x, y ) =
+            position
+
+        translate ( tx, ty ) =
+            ( tx + x, ty + y )
+    in
+    map translate tiles
+
+
+lookUp : Position -> Board -> Maybe Field
+lookUp ( tx, ty ) { rows } =
+    let
+        mbRow =
+            List.head <| List.drop ty rows
+    in
+    if tx < 0 || ty < 0 then
+        Nothing
+
+    else
+        case mbRow of
+            Nothing ->
+                Nothing
+
+            Just (Row fields) ->
+                List.head <| List.drop tx fields
 
 
 canDrop : CurrentPiece -> Board -> Bool
@@ -279,18 +341,6 @@ canDrop { position, tiles } board =
 
         translatedTiles =
             map translateToCurrentPos tiles
-
-        lookUp ( tx, ty ) { rows } =
-            let
-                mbRow =
-                    List.head <| List.drop ty rows
-            in
-            case mbRow of
-                Nothing ->
-                    Nothing
-
-                Just (Row fields) ->
-                    List.head <| List.drop tx fields
 
         isEmpty pos =
             lookUp pos board == Just Empty
@@ -484,6 +534,12 @@ ffToColor field =
 
         Field Red ->
             "red"
+
+        Field Purple ->
+            "purple"
+
+        Field Green ->
+            "green"
 
 
 fieldView : Field -> Int -> Int -> Html Msg
