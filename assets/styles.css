@@ -1,3 +1,6 @@
+main {
+  font-family: 'Raleway', sans-serif;
+}
 #build-errors {
   padding: 1em;
   background-color: #111;
