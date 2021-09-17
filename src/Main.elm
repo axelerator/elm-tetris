@@ -5,7 +5,7 @@ import Browser.Events exposing (onKeyDown)
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
-import List exposing (all, drop, head, length, map, range)
+import List exposing (all, drop, foldr, head, length, map, range)
 import Random
 import String exposing (fromInt)
 import Svg
@@ -45,6 +45,7 @@ type alias CurrentPiece =
 
 type alias Board =
     { rows : List Row
+    , emptyRow : Row
     }
 
 
@@ -175,7 +176,13 @@ mkEmptyRow columnCount _ =
 
 
 mkEmptyBoard rows columns =
-    { rows = map (mkEmptyRow columns) <| range 1 rows }
+    let
+        emptyRow =
+            mkEmptyRow columns 0
+    in
+    { rows = map (\_ -> emptyRow) <| range 1 rows
+    , emptyRow = emptyRow
+    }
 
 
 init : () -> ( Model, Cmd Msg )
@@ -379,11 +386,47 @@ dropCurrentPiece ({ board } as model) =
 
             else
                 ( { model
-                    | board = placePieceOnBoard currentPiece board
+                    | board = eraseCompleteRows <| placePieceOnBoard currentPiece board
                     , currentPiece = Nothing
                   }
                 , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
                 )
+
+
+eraseCompleteRows : Board -> Board
+eraseCompleteRows board =
+    let
+        replaceWithNothinFull ((Row fields) as row) =
+            if isFull row then
+                board.emptyRow
+
+            else
+                row
+
+        isFull (Row fields) =
+            all (\f -> f /= Empty) fields
+
+        folder : Row -> ( List Row, List Row ) -> ( List Row, List Row )
+        folder ((Row fields) as row) ( nonEmptyRows, header ) =
+            if isFull row then
+                ( nonEmptyRows
+                , mkEmptyRow (length fields) 0 :: header
+                )
+
+            else
+                ( row :: nonEmptyRows
+                , header
+                )
+
+        ( allNonEmptyRows, finalHeader ) =
+            foldr folder ( [], [] ) board.rows
+
+        newRows =
+            allNonEmptyRows ++ finalHeader
+    in
+    { board
+        | rows = newRows
+    }
 
 
 
