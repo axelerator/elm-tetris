@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Browser.Events exposing (onKeyDown)
 import Html exposing (Html, button, div, text)
+import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
 import List exposing (all, drop, foldr, head, length, map, range)
@@ -30,7 +31,12 @@ main =
 -- MODEL
 
 
-type alias Model =
+type Model
+    = RunningGame GameDetails
+    | GameOver Board
+
+
+type alias GameDetails =
     { board : Board
     , currentPiece : Maybe CurrentPiece
     }
@@ -191,9 +197,10 @@ init _ =
         emptyBoard =
             mkEmptyBoard boardHeight boardWidth
     in
-    ( { board = emptyBoard
-      , currentPiece = Nothing
-      }
+    ( RunningGame
+        { board = emptyBoard
+        , currentPiece = Nothing
+        }
     , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
     )
 
@@ -217,28 +224,28 @@ type Key
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        GravityTick _ ->
-            dropCurrentPiece model
+    case ( msg, model ) of
+        ( GravityTick _, RunningGame gameDetails ) ->
+            dropCurrentPiece gameDetails
 
-        KeyDown key ->
-            ( movePiece key model
+        ( KeyDown key, RunningGame gameDetails ) ->
+            ( RunningGame <| movePiece key gameDetails
             , Cmd.none
             )
 
-        NewCurrentPiece pieceIndex ->
-            ( spawnPiece pieceIndex model
+        ( NewCurrentPiece pieceIndex, RunningGame gameDetails ) ->
+            ( gameOverOrNewPiece pieceIndex gameDetails
             , Cmd.none
             )
 
-        Noop ->
+        _ ->
             ( model
             , Cmd.none
             )
 
 
-spawnPiece : Int -> Model -> Model
-spawnPiece pieceIndex model =
+gameOverOrNewPiece : Int -> GameDetails -> Model
+gameOverOrNewPiece pieceIndex gameDetails =
     let
         pieceDef =
             Maybe.withDefault tPiece <| head <| drop pieceIndex pieceDefinitions
@@ -249,7 +256,26 @@ spawnPiece pieceIndex model =
             , color = pieceDef.color
             }
     in
-    { model
+    if canDrop newPiece gameDetails.board then
+        RunningGame <| spawnPiece pieceIndex gameDetails
+
+    else
+        GameOver gameDetails.board
+
+
+spawnPiece : Int -> GameDetails -> GameDetails
+spawnPiece pieceIndex gameDetails =
+    let
+        pieceDef =
+            Maybe.withDefault tPiece <| head <| drop pieceIndex pieceDefinitions
+
+        newPiece =
+            { position = ( 5, boardHeight - 2 )
+            , tiles = pieceDef.tiles
+            , color = pieceDef.color
+            }
+    in
+    { gameDetails
         | currentPiece = Just newPiece
     }
 
@@ -259,11 +285,11 @@ flip f a b =
     f b a
 
 
-movePiece : Key -> Model -> Model
-movePiece key model =
-    case model.currentPiece of
+movePiece : Key -> GameDetails -> GameDetails
+movePiece key gameDetails =
+    case gameDetails.currentPiece of
         Nothing ->
-            model
+            gameDetails
 
         Just currentPiece ->
             let
@@ -297,14 +323,14 @@ movePiece key model =
 
                 canMove =
                     all ((==) (Just Empty)) <|
-                        map (flip lookUp model.board) <|
+                        map (flip lookUp gameDetails.board) <|
                             occupiedPositions movedPiece
             in
             if canMove then
-                { model | currentPiece = Just movedPiece }
+                { gameDetails | currentPiece = Just movedPiece }
 
             else
-                model
+                gameDetails
 
 
 occupiedPositions : CurrentPiece -> List Position
@@ -362,11 +388,11 @@ canDrop { position, tiles } board =
     List.all canPlace translatedTiles
 
 
-dropCurrentPiece : Model -> ( Model, Cmd Msg )
-dropCurrentPiece ({ board } as model) =
-    case model.currentPiece of
+dropCurrentPiece : GameDetails -> ( Model, Cmd Msg )
+dropCurrentPiece ({ board } as gameDetails) =
+    case gameDetails.currentPiece of
         Nothing ->
-            ( model, Cmd.none )
+            ( RunningGame gameDetails, Cmd.none )
 
         Just currentPiece ->
             let
@@ -380,15 +406,16 @@ dropCurrentPiece ({ board } as model) =
                     { currentPiece | position = ( x, nextRow ) }
             in
             if canDrop currentPiece board then
-                ( { model | currentPiece = Just droppedPiece }
+                ( RunningGame { gameDetails | currentPiece = Just droppedPiece }
                 , Cmd.none
                 )
 
             else
-                ( { model
-                    | board = eraseCompleteRows <| placePieceOnBoard currentPiece board
-                    , currentPiece = Nothing
-                  }
+                ( RunningGame
+                    { gameDetails
+                        | board = eraseCompleteRows <| placePieceOnBoard currentPiece board
+                        , currentPiece = Nothing
+                    }
                 , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
                 )
 
@@ -435,10 +462,15 @@ eraseCompleteRows board =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch
-        [ Time.every 300 GravityTick
-        , onKeyDown keyDecoder
-        ]
+    case model of
+        GameOver _ ->
+            Sub.none
+
+        RunningGame _ ->
+            Sub.batch
+                [ Time.every 100 GravityTick
+                , onKeyDown keyDecoder
+                ]
 
 
 keyDecoder : Decode.Decoder Msg
@@ -469,10 +501,23 @@ toKey string =
 
 view : Model -> Html Msg
 view model =
+    case model of
+        GameOver board ->
+            layout <|
+                div []
+                    [ div [ class "gameOver" ] [ text "Game Over" ]
+                    , boardView board Nothing
+                    ]
+
+        RunningGame { board, currentPiece } ->
+            layout <| boardView board currentPiece
+
+
+layout content =
     div []
         [ div [] [ text "Developing a Web Tetris in Elm" ]
         , div [] [ text "Continuing TONIGHT at 7PM (EST)" ]
-        , boardView model.board model.currentPiece
+        , content
         ]
 
 

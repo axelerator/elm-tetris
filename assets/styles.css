@@ -11,3 +11,10 @@ main {
     margin: 0;
 }
 
+.gameOver {
+    position: absolute;
+    color: white;
+    top: 100px;
+    left: 20px;
+  }
+
