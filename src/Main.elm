@@ -6,9 +6,9 @@ import Html exposing (Html, button, div, text)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
-import List exposing (all, drop, foldr, head, length, map, range)
+import List exposing (all, concat, drop, foldr, head, length, map, range)
 import Random
-import String exposing (fromInt)
+import String exposing (fromFloat, fromInt)
 import Svg
 import Svg.Attributes as SA
 import Time
@@ -33,12 +33,18 @@ main =
 
 type Model
     = RunningGame GameDetails
-    | GameOver Board
+    | GameOver Board Score
+
+
+type alias Score =
+    Int
 
 
 type alias GameDetails =
     { board : Board
     , currentPiece : Maybe CurrentPiece
+    , score : Score
+    , tick : Int
     }
 
 
@@ -67,8 +73,13 @@ type Field
     | Field FieldColor
 
 
+type alias Opacity =
+    Float
+
+
 type Row
     = Row (List Field)
+    | FadingRow (List Field) Opacity
 
 
 type alias Position =
@@ -138,8 +149,16 @@ pieceDefinitions =
 
 
 updateRow : FieldColor -> Position -> Int -> Row -> Row
-updateRow newColor ( x, y ) rowIndex ((Row fields) as oldRow) =
+updateRow newColor ( x, y ) rowIndex oldRow =
     let
+        fields =
+            case oldRow of
+                Row fs ->
+                    fs
+
+                FadingRow fs _ ->
+                    fs
+
         updateField fieldPosition field =
             if fieldPosition == x then
                 Field newColor
@@ -200,6 +219,8 @@ init _ =
     ( RunningGame
         { board = emptyBoard
         , currentPiece = Nothing
+        , score = 0
+        , tick = 0
         }
     , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
     )
@@ -260,7 +281,7 @@ gameOverOrNewPiece pieceIndex gameDetails =
         RunningGame <| spawnPiece pieceIndex gameDetails
 
     else
-        GameOver gameDetails.board
+        GameOver gameDetails.board gameDetails.score
 
 
 spawnPiece : Int -> GameDetails -> GameDetails
@@ -362,6 +383,9 @@ lookUp ( tx, ty ) { rows } =
             Just (Row fields) ->
                 List.head <| List.drop tx fields
 
+            Just (FadingRow fields _) ->
+                List.head <| List.drop tx fields
+
 
 canDrop : CurrentPiece -> Board -> Bool
 canDrop { position, tiles } board =
@@ -388,71 +412,124 @@ canDrop { position, tiles } board =
     List.all canPlace translatedTiles
 
 
+increaseTick : GameDetails -> GameDetails
+increaseTick gameDetails =
+    { gameDetails
+        | tick = gameDetails.tick + 1
+    }
+
+
 dropCurrentPiece : GameDetails -> ( Model, Cmd Msg )
 dropCurrentPiece ({ board } as gameDetails) =
-    case gameDetails.currentPiece of
-        Nothing ->
-            ( RunningGame gameDetails, Cmd.none )
+    if modBy 10 gameDetails.tick == 0 then
+        case gameDetails.currentPiece of
+            Nothing ->
+                ( RunningGame <| increaseTick gameDetails, Cmd.none )
 
-        Just currentPiece ->
-            let
-                ( x, y ) =
-                    currentPiece.position
+            Just currentPiece ->
+                let
+                    ( x, y ) =
+                        currentPiece.position
 
-                nextRow =
-                    y - 1
+                    nextRow =
+                        y - 1
 
-                droppedPiece =
-                    { currentPiece | position = ( x, nextRow ) }
-            in
-            if canDrop currentPiece board then
-                ( RunningGame { gameDetails | currentPiece = Just droppedPiece }
-                , Cmd.none
-                )
+                    droppedPiece =
+                        { currentPiece | position = ( x, nextRow ) }
+                in
+                if canDrop currentPiece board then
+                    ( RunningGame <| increaseTick <| progressFading { gameDetails | currentPiece = Just droppedPiece }
+                    , Cmd.none
+                    )
 
-            else
-                ( RunningGame
-                    { gameDetails
-                        | board = eraseCompleteRows <| placePieceOnBoard currentPiece board
-                        , currentPiece = Nothing
-                    }
-                , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
-                )
+                else
+                    let
+                        gameDetailsWithPlacedPiece =
+                            { gameDetails
+                                | board = placePieceOnBoard currentPiece board
+                            }
+                    in
+                    ( RunningGame <| increaseTick <| eraseCompleteRows gameDetailsWithPlacedPiece
+                    , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
+                    )
+
+    else
+        ( RunningGame <| increaseTick <| eraseCompleteRows <| progressFading gameDetails
+        , Cmd.none
+        )
 
 
-eraseCompleteRows : Board -> Board
-eraseCompleteRows board =
+progressFading : GameDetails -> GameDetails
+progressFading gameDetails =
     let
-        replaceWithNothinFull ((Row fields) as row) =
-            if isFull row then
-                board.emptyRow
+        oldBoard =
+            gameDetails.board
 
-            else
-                row
+        fadeRow row =
+            case row of
+                Row _ ->
+                    row
 
-        isFull (Row fields) =
-            all (\f -> f /= Empty) fields
+                FadingRow fields opacity ->
+                    FadingRow fields (opacity - 0.1)
+
+        fadedRows =
+            map fadeRow oldBoard.rows
+    in
+    { gameDetails
+        | board = { oldBoard | rows = fadedRows }
+    }
+
+
+eraseCompleteRows : GameDetails -> GameDetails
+eraseCompleteRows ({ board, currentPiece, score } as gameDetails) =
+    let
+        isFull row =
+            case row of
+                Row fields ->
+                    all (\f -> f /= Empty) fields
+
+                FadingRow fields _ ->
+                    all (\f -> f /= Empty) fields
 
         folder : Row -> ( List Row, List Row ) -> ( List Row, List Row )
-        folder ((Row fields) as row) ( nonEmptyRows, header ) =
-            if isFull row then
-                ( nonEmptyRows
-                , mkEmptyRow (length fields) 0 :: header
-                )
+        folder row ( nonEmptyRows, header ) =
+            case row of
+                Row fields ->
+                    if isFull row then
+                        ( FadingRow fields 1.0 :: nonEmptyRows
+                        , header
+                        )
 
-            else
-                ( row :: nonEmptyRows
-                , header
-                )
+                    else
+                        ( row :: nonEmptyRows
+                        , header
+                        )
+
+                FadingRow fields opacity ->
+                    if opacity <= 0.1 then
+                        ( nonEmptyRows
+                        , mkEmptyRow (length fields) 0 :: header
+                        )
+
+                    else
+                        ( FadingRow fields (opacity - 0.1) :: nonEmptyRows
+                        , header
+                        )
 
         ( allNonEmptyRows, finalHeader ) =
             foldr folder ( [], [] ) board.rows
 
         newRows =
             allNonEmptyRows ++ finalHeader
+
+        newBoard =
+            { board | rows = newRows }
     in
-    { board
-        | rows = newRows
+    { gameDetails
+        | board = newBoard
+        , currentPiece = Nothing
+        , score = score + length finalHeader
     }
 
 
@@ -463,12 +540,12 @@ eraseCompleteRows board =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        GameOver _ ->
+        GameOver _ _ ->
             Sub.none
 
         RunningGame _ ->
             Sub.batch
-                [ Time.every 100 GravityTick
+                [ Time.every 30 GravityTick
                 , onKeyDown keyDecoder
                 ]
 
@@ -502,21 +579,22 @@ toKey string =
 view : Model -> Html Msg
 view model =
     case model of
-        GameOver board ->
-            layout <|
+        GameOver board score ->
+            layout score <|
                 div []
                     [ div [ class "gameOver" ] [ text "Game Over" ]
                     , boardView board Nothing
                     ]
 
-        RunningGame { board, currentPiece } ->
-            layout <| boardView board currentPiece
+        RunningGame { board, currentPiece, score } ->
+            layout score <| boardView board currentPiece
 
 
-layout content =
+layout score content =
     div []
         [ div [] [ text "Developing a Web Tetris in Elm" ]
         , div [] [ text "Continuing TONIGHT at 7PM (EST)" ]
+        , div [] [ text <| fromInt score ]
         , content
         ]
 
@@ -543,8 +621,16 @@ placePieceOnBoard currentPiece oldBoard =
                 List.maximum <|
                     map Tuple.second absoluteTilePositions
 
-        colorInPostions rowIndex (Row fields) =
+        colorInPostions rowIndex row =
             let
+                fields =
+                    case row of
+                        Row fs ->
+                            fs
+
+                        FadingRow fs _ ->
+                            fs
+
                 equalPos ( tx, ty ) ( px, py ) =
                     tx == px && ty == py
 
@@ -595,9 +681,9 @@ boardView board mbCurrentPiece =
         rowViews
 
 
-fieldViewForRow : Int -> Int -> Field -> Html Msg
-fieldViewForRow rowIndex columnIndex field =
-    fieldView field rowIndex columnIndex
+fieldViewForRow : Int -> Opacity -> Int -> Field -> List (Html Msg)
+fieldViewForRow rowIndex opacity columnIndex field =
+    fieldView opacity field rowIndex columnIndex
 
 
 rowView : Int -> Row -> List (Html Msg)
@@ -608,7 +694,10 @@ rowView rowNumber row =
     in
     case row of
         Row fields ->
-            List.indexedMap (fieldViewForRow rowNumber) fields
+            concat <| List.indexedMap (fieldViewForRow rowNumber 1.0) fields
+
+        FadingRow fields opacity ->
+            concat <| List.indexedMap (fieldViewForRow rowNumber opacity) fields
 
 
 ffToColor : Field -> String
@@ -630,13 +719,33 @@ ffToColor field =
             "green"
 
 
-fieldView : Field -> Int -> Int -> Html Msg
-fieldView field row column =
+fieldView : Opacity -> Field -> Int -> Int -> List (Html Msg)
+fieldView opacity field row column =
+    case field of
+        Empty ->
+            [ emptyFieldView row column ]
+
+        _ ->
+            [ emptyFieldView row column
+            , Svg.rect
+                [ SA.x <| fromInt <| column * 11
+                , SA.y <| fromInt <| (boardHeight - row) * 11
+                , SA.width "10"
+                , SA.height "10"
+                , SA.fill <| ffToColor field
+                , SA.fillOpacity <| fromFloat opacity
+                ]
+                []
+            ]
+
+
+emptyFieldView : Int -> Int -> Html Msg
+emptyFieldView row column =
     Svg.rect
         [ SA.x <| fromInt <| column * 11
         , SA.y <| fromInt <| (boardHeight - row) * 11
         , SA.width "10"
         , SA.height "10"
-        , SA.fill <| ffToColor field
+        , SA.fill "#CCCCCC"
         ]
         []
