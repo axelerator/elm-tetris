@@ -18,9 +18,7 @@ import GameDetails
         , canDrop
         , eraseCompleteRows
         , increaseTick
-        , lookUp
         , mkEmptyBoard
-        , occupiedPositions
         , pieceDefinitions
         , placePieceOnBoard
         , progressFading
@@ -30,13 +28,13 @@ import GameDetails
 import Html exposing (Html, div, text)
 import Html.Attributes exposing (class)
 import Json.Decode as Decode
-import List exposing (all, concat, drop, head, length, map)
+import List exposing (concat, drop, head, length)
 import Random
 import String exposing (fromFloat, fromInt)
 import Svg
 import Svg.Attributes as SA
 import Time
-import Utils exposing (flip)
+import Utils
 
 
 
