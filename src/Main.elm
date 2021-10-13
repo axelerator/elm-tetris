@@ -35,6 +35,7 @@ import String exposing (fromFloat, fromInt)
 import Svg
 import Svg.Attributes as SA
 import Time
+import Utils exposing (flip)
 
 
 
@@ -134,9 +135,6 @@ gameOverOrNewPiece pieceIndex gameDetails =
         GameOver gameDetails.board gameDetails.score
 
 
-flip : (a -> b -> c) -> b -> a -> c
-flip f a b =
-    f b a
 
 
 movePiece : Key -> GameDetails -> GameDetails

@@ -1,6 +1,7 @@
 module GameDetails exposing (..)
 
 import List exposing (all, drop, foldr, head, length, map, range)
+import Utils exposing (flip)
 
 
 type alias Score =
