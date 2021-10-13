@@ -544,7 +544,7 @@ subscriptions model =
 
         RunningGame _ ->
             Sub.batch
-                [ Time.every 30 GravityTick
+                [ Time.every 20 GravityTick
                 , onKeyDown keyDecoder
                 ]
 
