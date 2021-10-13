@@ -9,6 +9,7 @@ import GameDetails
         , Field(..)
         , FieldColor(..)
         , GameDetails
+        , Movement(..)
         , Opacity
         , Row(..)
         , Score
@@ -135,54 +136,21 @@ gameOverOrNewPiece pieceIndex gameDetails =
         GameOver gameDetails.board gameDetails.score
 
 
-
-
 movePiece : Key -> GameDetails -> GameDetails
-movePiece key gameDetails =
-    case gameDetails.currentPiece of
-        Nothing ->
-            gameDetails
+movePiece key =
+    let
+        movement =
+            case key of
+                LeftArrow ->
+                    MoveLeft
 
-        Just currentPiece ->
-            let
-                ( x, y ) =
-                    currentPiece.position
+                RightArrow ->
+                    MoveRight
 
-                ( newPosition, newTiles ) =
-                    case key of
-                        LeftArrow ->
-                            ( ( x - 1, y )
-                            , currentPiece.tiles
-                            )
-
-                        RightArrow ->
-                            ( ( x + 1, y )
-                            , currentPiece.tiles
-                            )
-
-                        DownArrow ->
-                            ( currentPiece.position
-                            , map
-                                (\( tx, ty ) -> ( -ty, tx ))
-                                currentPiece.tiles
-                            )
-
-                movedPiece =
-                    { currentPiece
-                        | position = newPosition
-                        , tiles = newTiles
-                    }
-
-                canMove =
-                    all ((==) (Just Empty)) <|
-                        map (flip lookUp gameDetails.board) <|
-                            occupiedPositions movedPiece
-            in
-            if canMove then
-                { gameDetails | currentPiece = Just movedPiece }
-
-            else
-                gameDetails
+                DownArrow ->
+                    Rotate
+    in
+    GameDetails.movePiece movement
 
 
 dropCurrentPiece : GameDetails -> ( Model, Cmd Msg )

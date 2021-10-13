@@ -391,3 +391,57 @@ placePieceOnBoard currentPiece oldBoard =
             List.indexedMap updateWithPiece oldBoard.rows
     in
     { oldBoard | rows = newRows }
+
+
+type Movement
+    = MoveLeft
+    | MoveRight
+    | Rotate
+
+
+movePiece : Movement -> GameDetails -> GameDetails
+movePiece movement gameDetails =
+    case gameDetails.currentPiece of
+        Nothing ->
+            gameDetails
+
+        Just currentPiece ->
+            let
+                ( x, y ) =
+                    currentPiece.position
+
+                ( newPosition, newTiles ) =
+                    case movement of
+                        MoveLeft ->
+                            ( ( x - 1, y )
+                            , currentPiece.tiles
+                            )
+
+                        MoveRight ->
+                            ( ( x + 1, y )
+                            , currentPiece.tiles
+                            )
+
+                        Rotate ->
+                            ( currentPiece.position
+                            , map
+                                (\( tx, ty ) -> ( -ty, tx ))
+                                currentPiece.tiles
+                            )
+
+                movedPiece =
+                    { currentPiece
+                        | position = newPosition
+                        , tiles = newTiles
+                    }
+
+                canMove =
+                    all ((==) (Just Empty)) <|
+                        map (flip lookUp gameDetails.board) <|
+                            occupiedPositions movedPiece
+            in
+            if canMove then
+                { gameDetails | currentPiece = Just movedPiece }
+
+            else
+                gameDetails
