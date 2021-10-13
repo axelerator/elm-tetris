@@ -2,9 +2,8 @@ module Main exposing (..)
 
 import Browser
 import Browser.Events exposing (onKeyDown)
-import Html exposing (Html, button, div, text)
+import Html exposing (Html, div, text)
 import Html.Attributes exposing (class)
-import Html.Events exposing (onClick)
 import Json.Decode as Decode
 import List exposing (all, concat, drop, foldr, head, length, map, range)
 import Random
@@ -18,6 +17,7 @@ import Time
 -- MAIN
 
 
+main : Program () Model Msg
 main =
     Browser.element
         { init = init
@@ -402,7 +402,7 @@ canDrop { position, tiles } board =
         isEmpty pos =
             lookUp pos board == Just Empty
 
-        canPlace (( tx, ty ) as pos) =
+        canPlace (( _, ty ) as pos) =
             if ty < 0 then
                 False
 
@@ -482,7 +482,7 @@ progressFading gameDetails =
 
 
 eraseCompleteRows : GameDetails -> GameDetails
-eraseCompleteRows ({ board, currentPiece, score } as gameDetails) =
+eraseCompleteRows ({ board, score } as gameDetails) =
     let
         isFull row =
             case row of
@@ -688,7 +688,7 @@ fieldViewForRow rowIndex opacity columnIndex field =
 rowView : Int -> Row -> List (Html Msg)
 rowView rowNumber row =
     let
-        empty =
+        _ =
             Field Red
     in
     case row of
