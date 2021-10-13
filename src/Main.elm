@@ -528,7 +528,6 @@ eraseCompleteRows ({ board, currentPiece, score } as gameDetails) =
     in
     { gameDetails
         | board = newBoard
-        , currentPiece = Nothing
         , score = score + length finalHeader
     }
 
