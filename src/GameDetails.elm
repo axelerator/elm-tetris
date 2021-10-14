@@ -445,3 +445,43 @@ movePiece movement gameDetails =
 
             else
                 gameDetails
+
+
+dropCurrentPiece : GameDetails -> ( GameDetails, Bool )
+dropCurrentPiece ({ board } as gameDetails) =
+    if modBy 10 gameDetails.tick == 0 then
+        case gameDetails.currentPiece of
+            Nothing ->
+                ( increaseTick gameDetails, False )
+
+            Just currentPiece ->
+                let
+                    ( x, y ) =
+                        currentPiece.position
+
+                    nextRow =
+                        y - 1
+
+                    droppedPiece =
+                        { currentPiece | position = ( x, nextRow ) }
+                in
+                if canDrop currentPiece board then
+                    ( increaseTick <| progressFading { gameDetails | currentPiece = Just droppedPiece }
+                    , False
+                    )
+
+                else
+                    let
+                        gameDetailsWithPlacedPiece =
+                            { gameDetails
+                                | board = placePieceOnBoard currentPiece board
+                            }
+                    in
+                    ( increaseTick <| eraseCompleteRows gameDetailsWithPlacedPiece
+                    , True
+                    )
+
+    else
+        ( increaseTick <| eraseCompleteRows <| progressFading gameDetails
+        , False
+        )

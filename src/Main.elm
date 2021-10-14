@@ -152,43 +152,21 @@ movePiece key =
 
 
 dropCurrentPiece : GameDetails -> ( Model, Cmd Msg )
-dropCurrentPiece ({ board } as gameDetails) =
-    if modBy 10 gameDetails.tick == 0 then
-        case gameDetails.currentPiece of
-            Nothing ->
-                ( RunningGame <| increaseTick gameDetails, Cmd.none )
+dropCurrentPiece gameDetails =
+    let
+        ( updatedGameDetails, needsNewPiece ) =
+            GameDetails.dropCurrentPiece gameDetails
 
-            Just currentPiece ->
-                let
-                    ( x, y ) =
-                        currentPiece.position
+        cmd =
+            if needsNewPiece then
+                Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
 
-                    nextRow =
-                        y - 1
-
-                    droppedPiece =
-                        { currentPiece | position = ( x, nextRow ) }
-                in
-                if canDrop currentPiece board then
-                    ( RunningGame <| increaseTick <| progressFading { gameDetails | currentPiece = Just droppedPiece }
-                    , Cmd.none
-                    )
-
-                else
-                    let
-                        gameDetailsWithPlacedPiece =
-                            { gameDetails
-                                | board = placePieceOnBoard currentPiece board
-                            }
-                    in
-                    ( RunningGame <| increaseTick <| eraseCompleteRows gameDetailsWithPlacedPiece
-                    , Random.generate NewCurrentPiece (Random.int 0 <| (length pieceDefinitions - 1))
-                    )
-
-    else
-        ( RunningGame <| increaseTick <| eraseCompleteRows <| progressFading gameDetails
-        , Cmd.none
-        )
+            else
+                Cmd.none
+    in
+    ( RunningGame updatedGameDetails
+    , cmd
+    )
 
 
 
