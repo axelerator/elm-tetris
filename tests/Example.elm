@@ -1,8 +1,7 @@
 module Example exposing (..)
 
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
-import List exposing (map, range)
+import Expect
+import GameDetails exposing (Field(..), FieldColor(..), Row(..), canDrop, eraseCompleteRows, lookUp, mkEmptyBoard, mkEmptyRow, placePieceOnBoard)
 import Main exposing (..)
 import Test exposing (..)
 
@@ -11,17 +10,11 @@ suite : Test
 suite =
     describe "Tetris"
         [ describe "eraseCompleteRows"
-            [ test "drops rows above multiple cleared rows" <|
+            [ test "erases full row on bottom" <|
                 \_ ->
                     let
-                        emptyBoard =
+                        _ =
                             mkEmptyBoard 3 3
-
-                        droppedPiece =
-                            { position = ( 1, 2 )
-                            , tiles = [ ( 0, 0 ) ]
-                            , color = Blue
-                            }
 
                         alreadyPlacedPiece =
                             { position = ( 1, 0 )
@@ -29,86 +22,26 @@ suite =
                             , color = Red
                             }
 
-                        otherAlreadyPlacedPiece =
-                            { alreadyPlacedPiece
-                                | position = ( 1, 1 )
-                            }
-
                         emptyRow =
                             mkEmptyRow 3 0
 
-                        boardWithRowToClear =
-                            placePieceOnBoard alreadyPlacedPiece (mkEmptyBoard 3 3)
-
-                        boardWith2RowsToClear =
-                            placePieceOnBoard otherAlreadyPlacedPiece boardWithRowToClear
-
-                        boardWithTileToDrop =
-                            placePieceOnBoard droppedPiece boardWith2RowsToClear
-
                         expectedRows =
-                            [ Row [ Empty, Field Blue, Empty ]
+                            [ FadingRow [ Field Red, Field Red, Field Red ] 1
                             , emptyRow
                             , emptyRow
                             ]
-                    in
-                    Expect.equal (eraseCompleteRows boardWithTileToDrop).rows expectedRows
-            , test "drops rows above cleared rows" <|
-                \_ ->
-                    let
-                        emptyBoard =
-                            mkEmptyBoard 3 3
-
-                        droppedPiece =
-                            { position = ( 1, 1 )
-                            , tiles = [ ( 0, 0 ) ]
-                            , color = Blue
-                            }
-
-                        alreadyPlacedPiece =
-                            { position = ( 1, 0 )
-                            , tiles = [ ( -1, 0 ), ( 0, 0 ), ( 1, 0 ) ]
-                            , color = Red
-                            }
-
-                        emptyRow =
-                            mkEmptyRow 3 0
-
-                        boardWithRowToClear =
-                            placePieceOnBoard alreadyPlacedPiece (mkEmptyBoard 3 3)
-
-                        boardWithTileToDrop =
-                            placePieceOnBoard droppedPiece boardWithRowToClear
-
-                        expectedRows =
-                            [ Row [ Empty, Field Blue, Empty ]
-                            , emptyRow
-                            , emptyRow
-                            ]
-                    in
-                    Expect.equal (eraseCompleteRows boardWithTileToDrop).rows expectedRows
-            , test "erases full row on bottom" <|
-                \_ ->
-                    let
-                        emptyBoard =
-                            mkEmptyBoard 3 3
-
-                        alreadyPlacedPiece =
-                            { position = ( 1, 0 )
-                            , tiles = [ ( -1, 0 ), ( 0, 0 ), ( 1, 0 ) ]
-                            , color = Red
-                            }
-
-                        emptyRow =
-                            mkEmptyRow 3 0
-
-                        expectedRows =
-                            [ emptyRow, emptyRow, emptyRow ]
 
                         boardWithATile =
                             placePieceOnBoard alreadyPlacedPiece (mkEmptyBoard 3 3)
+
+                        gameDetails =
+                            { board = boardWithATile
+                            , currentPiece = Nothing
+                            , score = 0
+                            , tick = 0
+                            }
                     in
-                    Expect.equal (eraseCompleteRows boardWithATile).rows expectedRows
+                    Expect.equal (eraseCompleteRows gameDetails).board.rows expectedRows
             ]
         , describe "canDrop"
             [ test "lookUp returns Nothing for lookup left outside of board" <|
